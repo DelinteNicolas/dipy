@@ -28,7 +28,8 @@ cdef class ProbabilisticDirectionGetter(PmfGenDirectionGetter):
     set to 0 and the result is normalized.
     """
 
-    def __init__(self, pmf_gen, max_angle, sphere, pmf_threshold=.1, **kwargs):
+    def __init__(self, pmf_gen, max_angle, sphere, pmf_threshold=.1,
+                 angular_map=None, **kwargs):
         """Direction getter from a pmf generator.
 
         Parameters
@@ -60,6 +61,16 @@ cdef class ProbabilisticDirectionGetter(PmfGenDirectionGetter):
                                        pmf_threshold, **kwargs)
         # The vertices need to be in a contiguous array
         self.vertices = self.sphere.vertices.copy()
+        
+        # !!!
+        if angular_map is not None:
+            angle_array=np.linspace(0,90,90)
+            self.cos_similarity=np.cos(np.deg2rad(angle_array))
+            self.angular_map=np.floor(angular_map,dtype=int)
+            self.angle_variation=True
+            print('Angle variation enabled')
+        else:
+            self.angle_variation=False
 
 
     cdef int get_direction_c(self, double[::1] point, double[::1] direction):
@@ -100,8 +111,15 @@ cdef class ProbabilisticDirectionGetter(PmfGenDirectionGetter):
                         + self.vertices[i][2] * direction[2]
                 if cos_sim < 0:
                     cos_sim = cos_sim * -1
-                if cos_sim < self.cos_similarity:
-                    pmf[i] = 0
+                # !!!
+                if self.angle_variation:
+                    angle=self.angular_map[int(point[0]), int(point[1]),
+                                           int(point[2])]
+                    if cos_sim < self.cos_similarity[angle]:
+                        pmf[i] = 0
+                else:
+                    if cos_sim < self.cos_similarity:
+                        pmf[i] = 0
 
             cumsum(&pmf[0], &pmf[0], _len)
             last_cdf = pmf[_len - 1]
